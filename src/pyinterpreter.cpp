@@ -1,4 +1,5 @@
 #include "pyinterpreter.h"
+#include "dlpack.h"
 #include <sstream>
 #include <iostream>
 #include <csignal>
@@ -16,6 +17,15 @@ namespace
     {
         std::exit(130);
     }
+
+   static inline size_t GetDataSize(const DLTensor* t) {
+     size_t size = 1;
+     for (int32_t i = 0; i < t->ndim; ++i) {
+       size *= t->shape[i];
+     }
+     size *= (t->dtype.bits * t->dtype.lanes + 7) / 8;
+     return size;
+   }
 }
 
 PyInterpreter::PyInterpreter() : m_state(nullptr)
@@ -284,6 +294,20 @@ napi_value PyInterpreter::convert(napi_env env, PyObject* obj)
     }
     else
     {
+        PyObject* type = PyObject_Type(obj);
+        PyObject* dlpack = PyObject_GetAttrString(obj, "__dlpack__");
+        if (dlpack) {
+          PyObject* capsule = PyObject_CallNoArgs(dlpack);
+          const char* name = PyCapsule_GetName(capsule);
+          DLTensor* tensor = (DLTensor*)PyCapsule_GetPointer(capsule, name);
+          napi_value result;
+					CHECK(napi_create_int64(env, (int64_t)tensor, &result));
+          //CHECK(PyCapsule_SetDestructor(capsule, NULL));
+					//size_t size = GetDataSize(tensor);
+					//CHECK(napi_create_buffer_copy(env, size, tensor->data, NULL, &result));
+          return result;
+        }
+        return PyInterpreter::convert(env, PyObject_Str(type));
         CPyObject iterator = PyObject_GetIter(obj);
         if (iterator)
         {
