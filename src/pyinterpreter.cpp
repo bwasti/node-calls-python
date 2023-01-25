@@ -10,6 +10,7 @@ using namespace nodecallspython;
 std::mutex nodecallspython::GIL::m_mutex;
 bool nodecallspython::PyInterpreter::m_inited = false;
 std::mutex nodecallspython::PyInterpreter::m_mutex;
+static char dltensor_str[] = "dltensor";
 
 namespace
 {
@@ -151,6 +152,33 @@ namespace
 
             uint32_t length = 0;
             CHECK(napi_get_array_length(env, properties, &length));
+            if (length == 1) {
+                napi_value key;
+                CHECK(napi_get_element(env, properties, 0, &key));
+                size_t str_length = 0;
+                CHECK(napi_get_value_string_utf8(env, key, NULL, 0, &str_length));
+                std::string s(str_length, ' ');
+                CHECK(napi_get_value_string_utf8(env, key, &s[0], str_length + 1, &str_length));
+                if (s == dltensor_str) {
+                  napi_value value;
+                  CHECK(napi_get_property(env, arg, key, &value));
+                  PyObject* dlModuleString = PyUnicode_FromString((char*)"torch");
+                  PyObject* dlModule = PyImport_Import(dlModuleString);
+                  if (dlModule) {
+                    PyObject* convertFunc = PyObject_GetAttrString(dlModule, (char*)"from_dlpack");
+                    int64_t ptr;
+                    CHECK(napi_get_value_int64(env, value, &ptr));
+                    auto capsule = PyCapsule_New((void*)ptr, dltensor_str, NULL);
+                    PyObject* args = PyTuple_Pack(1, capsule);
+                    PyObject* result = PyObject_CallObject(convertFunc, args);
+                    if (result) {
+                      return result;
+                    } else {
+                      PyErr_Print();
+                    }
+                  }
+                }
+            }
 
             auto* dict = PyDict_New();
 
@@ -300,11 +328,12 @@ napi_value PyInterpreter::convert(napi_env env, PyObject* obj)
           PyObject* capsule = PyObject_CallNoArgs(dlpack);
           const char* name = PyCapsule_GetName(capsule);
           DLTensor* tensor = (DLTensor*)PyCapsule_GetPointer(capsule, name);
+          PyCapsule_SetDestructor(capsule, NULL);
           napi_value result;
-					CHECK(napi_create_int64(env, (int64_t)tensor, &result));
-          //CHECK(PyCapsule_SetDestructor(capsule, NULL));
-					//size_t size = GetDataSize(tensor);
-					//CHECK(napi_create_buffer_copy(env, size, tensor->data, NULL, &result));
+          napi_value pointer;
+          CHECK(napi_create_int64(env, (int64_t)tensor, &pointer));
+          CHECK(napi_create_object(env, &result));
+          CHECK(napi_set_named_property(env, result, "dltensor", pointer));
           return result;
         }
         return PyInterpreter::convert(env, PyObject_Str(type));
@@ -369,22 +398,29 @@ namespace
     {
         if (PyErr_Occurred())
         {
-            PyObject *type, *value, *traceback;
-            PyErr_Fetch(&type, &value, &traceback);
+            PyErr_Print();
+            //PyObject *type, *value, *traceback;
+            //PyErr_Fetch(&type, &value, &traceback);
 
-            CPyObject error = PyObject_Str(value);
+            //CPyObject error = PyObject_Str(value);
+            //CPyObject trace = PyObject_Str(traceback);
 
-            std::runtime_error err("Unknown python error");
-            if (error)
-            {
-                Py_ssize_t size;
-                auto str = PyUnicode_AsUTF8AndSize(*error, &size);
-                err = std::runtime_error(str ? str : "Unknown python error");
-            }
+            //std::string err_str;
+            //if (error)
+            //{
+            //    Py_ssize_t size;
+            //    err_str += PyUnicode_AsUTF8AndSize(*error, &size);
+            //}
+            //if (trace)
+            //{
+            //    Py_ssize_t size;
+            //    err_str += PyUnicode_AsUTF8AndSize(*trace, &size);
+            //}
+            //std::runtime_error err(err_str.size() ? err_str : "Unknown python error");
 
-            PyErr_Restore(type, value, traceback);
+            //PyErr_Restore(type, value, traceback);
 
-            throw err;
+            throw std::runtime_error("An exception occurred in Python code");
         }
     }
 }

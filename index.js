@@ -2,6 +2,7 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const nodecallspython = require("./build/Release/nodecallspython");
+import * as sm from '@shumai/shumai'
 
 class Interpreter
 {
@@ -203,6 +204,36 @@ class Interpreter
 
 let py = new Interpreter();
 
+function py_import(file) {
+  const imported_module = py.importSync(file)
+  function convert(obj, callback) {
+    const res = callback(obj);
+    if (res) {
+      return res;
+    }
+    for (var property in obj) {
+      if (obj.hasOwnProperty(property)) {
+        if (typeof obj[property] == "object") {
+          obj[property] = convert(obj[property], callback)
+        }
+      }
+    }
+    return obj
+  }
+  const toDLTensor = (x) => convert(x, (obj) => obj.constructor === sm.Tensor ?  {'dltensor': obj.toDLTensor()} : null)
+  const fromDLTensor = (x) => convert(x, (obj) => obj.hasOwnProperty('dltensor') ?  sm.fromDLTensor(obj.dltensor) : null)
+  let handler = {
+    get(target, name) {
+      return (...args) => {
+        args = toDLTensor(args)
+        const val = py.callSync(target, name, ...args)
+        return fromDLTensor(val)
+      }
+    }
+  }
+  return new Proxy(imported_module, handler)
+}
+
 module.exports = {
-    interpreter: py
+    import: py_import
 }

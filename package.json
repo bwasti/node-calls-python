@@ -1,28 +1,27 @@
 {
-  "name": "node-calls-python",
-  "version": "1.7.6",
+  "name": "@shumai/python",
+  "version": "0.0.1",
   "license": "MIT",
-  "description": "This module lets you run python code inside node without spawning new processes",
+  "description": "This module lets you run Python code inside node without spawning new processes.  It automatically wraps Tensors with Shumai",
   "authors": [
+    "Bram Wasti (bwasti@gmail.com)",
     "Menyhert Hegedus (hmenyus@gmail.com)"
   ],
   "keywords": [
     "python",
+    "tensor",
+    "shumai",
     "c++",
-    "v8",
-    "node",
-    "nodejs",
-    "node-js",
     "napi"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/hmenyus/node-calls-python.git"
+    "url": "https://github.com/bwasti/node-calls-python.git"
   },
   "licenses": [
     {
       "type": "MIT",
-      "url": "https://github.com/hmenyus/node-calls-python/blob/master/LICENSE"
+      "url": "https://github.com/bwasti/node-calls-python/blob/master/LICENSE"
     }
   ],
   "files": [
